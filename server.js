@@ -18,22 +18,19 @@ app.post('/api/extract-agenda', async (req, res) => {
     return res.status(400).json({ error: 'Pauta não pode estar vazia.' });
   }
 
-  const apiKey  = process.env.TESS_API_KEY;
-  const agentId = process.env.TESS_AGENT_ID;
-
-  if (!apiKey)  return res.status(500).json({ error: 'TESS_API_KEY não configurada no servidor.' });
-  if (!agentId) return res.status(500).json({ error: 'TESS_AGENT_ID não configurado no servidor.' });
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'GROQ_API_KEY não configurada no servidor.' });
 
   try {
-    const tessResponse = await axios.post(
-      `https://tess.pareto.io/api/agents/${agentId}/execute`,
+    const groqResponse = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
       {
-        model: 'tess-5',
+        model: 'llama-3.3-70b-versatile',
         messages: [
           {
             role: 'system',
             content:
-              'Você é um assistente de reuniões. Leia o texto e extraia os tópicos. ' +
+              'Você é um assistente de reuniões. Leia o texto e extraia os tópicos que devem ser abordados na reunião. ' +
               'Retorne EXCLUSIVAMENTE um objeto JSON com uma chave "topics" contendo um array de strings. ' +
               'Sem markdown, sem explicações extras.'
           },
@@ -42,9 +39,8 @@ app.post('/api/extract-agenda', async (req, res) => {
             content: agenda
           }
         ],
-        temperature: '0.2',
-        tools: 'no-tools',
-        wait_execution: true
+        temperature: 0.2,
+        response_format: { type: 'json_object' }
       },
       {
         headers: {
@@ -55,15 +51,14 @@ app.post('/api/extract-agenda', async (req, res) => {
       }
     );
 
-    console.log('[TESS AI] Resposta bruta:', JSON.stringify(tessResponse.data, null, 2));
+    console.log('[GROQ] Resposta bruta:', JSON.stringify(groqResponse.data, null, 2));
 
-    const raw = tessResponse.data.output;
+    const raw = groqResponse.data.choices[0].message.content;
     let parsed;
 
     try {
       parsed = JSON.parse(raw);
     } catch {
-      // Modelo pode ter retornado com bloco markdown ```json ... ```
       const match = raw.match(/\{[\s\S]*\}/);
       if (match) {
         parsed = JSON.parse(match[0]);
@@ -80,9 +75,9 @@ app.post('/api/extract-agenda', async (req, res) => {
 
   } catch (err) {
     const detail = err.response?.data || err.message;
-    console.error('[TESS AI] Erro na chamada:', detail);
+    console.error('[GROQ] Erro na chamada:', detail);
     return res.status(500).json({
-      error: err.response?.data?.message || err.message || 'Erro ao chamar a Tess AI.'
+      error: err.response?.data?.error?.message || err.message || 'Erro ao chamar a Groq API.'
     });
   }
 });

@@ -163,24 +163,36 @@ app.post('/api/generate-report', async (req, res) => {
     return res.status(400).json({ error: 'Lista de tópicos ausente ou vazia.' });
   }
 
-  const apiKey = process.env.TESS_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'TESS_API_KEY não configurada no servidor.' });
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'GROQ_API_KEY não configurada no servidor.' });
 
-  const abordados   = topics.filter(t => t.checked).map(t => `✓ ${t.text}`).join('\n') || 'Nenhum';
-  const pendentes   = topics.filter(t => !t.checked).map(t => `✗ ${t.text}`).join('\n') || 'Nenhum';
-
-  const coletaDeDados =
-    `TÓPICOS ABORDADOS:\n${abordados}\n\n` +
-    `TÓPICOS NÃO ABORDADOS:\n${pendentes}\n\n` +
-    `TRANSCRIÇÃO DA REUNIÃO:\n${transcription}`;
+  const abordados = topics.filter(t => t.checked).map(t => `✓ ${t.text}`).join('\n') || 'Nenhum';
+  const pendentes = topics.filter(t => !t.checked).map(t => `✗ ${t.text}`).join('\n') || 'Nenhum';
 
   try {
-    const tessResponse = await axios.post(
-      'https://tess.pareto.io/api/agents/45510/execute',
+    const groqResponse = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
       {
-        'coleta-de-dados': coletaDeDados,
-        model: 'tess-5',
-        wait_execution: true
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Você é um assistente de reuniões. Gere um relatório profissional e estruturado da reunião ' +
+              'com base na transcrição e nos tópicos fornecidos. ' +
+              'O relatório deve conter: data/contexto (se inferível), resumo executivo, ' +
+              'tópicos abordados com seus principais pontos, tópicos não cobertos e próximos passos sugeridos. ' +
+              'Escreva em português, em formato de texto corrido com seções bem definidas.'
+          },
+          {
+            role: 'user',
+            content:
+              `TÓPICOS ABORDADOS:\n${abordados}\n\n` +
+              `TÓPICOS NÃO ABORDADOS:\n${pendentes}\n\n` +
+              `TRANSCRIÇÃO DA REUNIÃO:\n${transcription}`
+          }
+        ],
+        temperature: 0.4
       },
       {
         headers: {
@@ -191,18 +203,18 @@ app.post('/api/generate-report', async (req, res) => {
       }
     );
 
-    console.log('[TESS] Relatório gerado:', JSON.stringify(tessResponse.data, null, 2));
+    console.log('[GROQ] Relatório gerado:', JSON.stringify(groqResponse.data, null, 2));
 
-    const report = tessResponse.data.output;
-    if (!report) throw new Error('Tess AI não retornou conteúdo no campo "output".');
+    const report = groqResponse.data.choices[0].message.content;
+    if (!report) throw new Error('Groq não retornou conteúdo.');
 
     return res.json({ report });
 
   } catch (err) {
     const detail = err.response?.data || err.message;
-    console.error('[TESS] Erro ao gerar relatório:', detail);
+    console.error('[GROQ] Erro ao gerar relatório:', detail);
     return res.status(500).json({
-      error: err.response?.data?.message || err.message || 'Erro ao gerar relatório.'
+      error: err.response?.data?.error?.message || err.message || 'Erro ao gerar relatório.'
     });
   }
 });

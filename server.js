@@ -1,8 +1,9 @@
 require('dotenv').config();
 
-const express = require('express');
-const axios   = require('axios');
-const path    = require('path');
+const express    = require('express');
+const axios      = require('axios');
+const path       = require('path');
+const PDFDocument = require('pdfkit');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -217,6 +218,104 @@ app.post('/api/generate-report', async (req, res) => {
       error: err.response?.data?.error?.message || err.message || 'Erro ao gerar relatório.'
     });
   }
+});
+
+// ===== POST /api/report-pdf =====
+app.post('/api/report-pdf', (req, res) => {
+  const { report } = req.body;
+
+  if (!report || !report.trim()) {
+    return res.status(400).json({ error: 'Conteúdo do relatório ausente.' });
+  }
+
+  const date = new Date().toLocaleDateString('pt-BR', {
+    day: '2-digit', month: 'long', year: 'numeric'
+  });
+  const filename = `relatorio-${new Date().toISOString().split('T')[0]}.pdf`;
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  const doc = new PDFDocument({ margin: 60, size: 'A4' });
+  doc.pipe(res);
+
+  // Cabeçalho
+  doc
+    .fontSize(22).font('Helvetica-Bold').fillColor('#1a1d27')
+    .text('Relatório de Reunião', { align: 'center' });
+
+  doc
+    .fontSize(10).font('Helvetica').fillColor('#666')
+    .text(date, { align: 'center' });
+
+  doc.moveDown(1.5);
+
+  // Linha divisória
+  doc.moveTo(60, doc.y).lineTo(535, doc.y).strokeColor('#cccccc').lineWidth(1).stroke();
+  doc.moveDown(1);
+
+  // Corpo — interpreta seções do texto gerado pelo Groq
+  const lines = report.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      doc.moveDown(0.4);
+      continue;
+    }
+
+    // Markdown ## ou # → título de seção
+    if (/^#{1,2}\s+/.test(trimmed)) {
+      const text = trimmed.replace(/^#{1,2}\s+/, '');
+      doc.moveDown(0.5)
+        .fontSize(13).font('Helvetica-Bold').fillColor('#2c3060')
+        .text(text);
+      doc.moveDown(0.2);
+      continue;
+    }
+
+    // Linha toda em MAIÚSCULAS curta → título de seção
+    const upper = trimmed.toUpperCase();
+    if (trimmed === upper && trimmed.length >= 4 && trimmed.length <= 80 && /[A-ZÁÉÍÓÚÀÊÔÃÕÜÇ]/.test(trimmed)) {
+      doc.moveDown(0.5)
+        .fontSize(12).font('Helvetica-Bold').fillColor('#2c3060')
+        .text(trimmed);
+      doc.moveDown(0.2);
+      continue;
+    }
+
+    // Linha terminando com : e curta → sub-título
+    if (trimmed.endsWith(':') && trimmed.length <= 60 && !trimmed.startsWith('-')) {
+      doc.moveDown(0.3)
+        .fontSize(11).font('Helvetica-Bold').fillColor('#333')
+        .text(trimmed);
+      doc.moveDown(0.1);
+      continue;
+    }
+
+    // Item de lista
+    if (/^[-•*]\s/.test(trimmed) || trimmed.startsWith('[x]') || trimmed.startsWith('[ ]')) {
+      const bullet = trimmed.replace(/^[-•*]\s/, '').replace(/^\[[x ]\]\s?/, '');
+      doc.fontSize(10).font('Helvetica').fillColor('#222')
+        .text(`• ${bullet}`, { indent: 16 });
+      continue;
+    }
+
+    // Remove marcação markdown restante (**bold**, _italic_)
+    const clean = trimmed.replace(/\*\*(.+?)\*\*/g, '$1').replace(/_(.+?)_/g, '$1');
+    doc.fontSize(10).font('Helvetica').fillColor('#222')
+      .text(clean, { align: 'justify' });
+  }
+
+  // Rodapé
+  const pageCount = doc.bufferedPageRange ? doc.bufferedPageRange().count : 1;
+  doc.fontSize(8).fillColor('#aaa')
+    .text(`Gerado por Canastra • ${date}`, 60, doc.page.height - 40, {
+      align: 'center', width: doc.page.width - 120
+    });
+
+  doc.end();
+  console.log(`[PDF] Relatório gerado: ${filename} (${pageCount} página(s))`);
 });
 
 app.get('/', (req, res) => {

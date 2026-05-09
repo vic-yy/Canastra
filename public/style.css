@@ -316,7 +316,12 @@ textarea::placeholder {
 }
 
 .btn-link:hover {
-  color: var(--color-danger);
+  color: var(--color-primary);
+}
+
+.report-actions {
+  display: flex;
+  gap: 12px;
 }
 
 /* ===== TOPICS LIST ===== */

@@ -8,6 +8,7 @@ const btnAnalyze       = document.getElementById('btn-analyze');
 const btnEnd           = document.getElementById('btn-end');
 const btnReport        = document.getElementById('btn-report');
 const btnCopyReport    = document.getElementById('btn-copy-report');
+const btnDownloadPdf   = document.getElementById('btn-download-pdf');
 const statusBar        = document.getElementById('status-bar');
 const statusText       = document.getElementById('status-text');
 const transcription    = document.getElementById('transcription');
@@ -392,6 +393,44 @@ btnCopyReport.addEventListener('click', async () => {
     setTimeout(() => { btnCopyReport.textContent = 'Copiar'; }, 2000);
   } catch {
     alert('Não foi possível copiar. Selecione o texto manualmente.');
+  }
+});
+
+// ===== BOTÃO BAIXAR PDF =====
+btnDownloadPdf.addEventListener('click', async () => {
+  const text = reportOutput.textContent;
+  if (!text) return;
+
+  btnDownloadPdf.textContent = 'Gerando...';
+  btnDownloadPdf.style.pointerEvents = 'none';
+
+  try {
+    const response = await fetch('/api/report-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ report: text })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || `Erro HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `relatorio-${new Date().toISOString().split('T')[0]}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    console.log('[PDF] Download iniciado.');
+  } catch (err) {
+    console.error('[PDF] Falha ao gerar PDF:', err);
+    alert(`Erro ao gerar PDF:\n${err.message}`);
+  } finally {
+    btnDownloadPdf.textContent  = 'Baixar PDF';
+    btnDownloadPdf.style.pointerEvents = '';
   }
 });
 

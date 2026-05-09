@@ -131,8 +131,8 @@ function stopListening() {
   console.log('[MIC] Microfone pausado.');
 }
 
-// ===== PROCESSAR PAUTA =====
-btnProcess.addEventListener('click', () => {
+// ===== PROCESSAR PAUTA (via Tess AI) =====
+btnProcess.addEventListener('click', async () => {
   const rawText = agendaInput.value.trim();
 
   if (!rawText) {
@@ -140,19 +140,43 @@ btnProcess.addEventListener('click', () => {
     return;
   }
 
-  const lines = rawText
-    .split('\n')
-    .map(line => line.replace(/^[-•*\d.]+\s*/, '').trim())
-    .filter(line => line.length > 0);
+  btnProcess.disabled    = true;
+  btnProcess.textContent = 'Processando...';
 
-  if (lines.length === 0) {
-    alert('Nenhum tópico encontrado. Verifique o formato da pauta.');
+  try {
+    const response = await fetch('/api/extract-agenda', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agenda: rawText })
+    });
+
+    const data = await response.json();
+    console.log('[APP] Resposta de /api/extract-agenda:', data);
+
+    if (!response.ok) {
+      throw new Error(data.error || `Erro HTTP ${response.status}`);
+    }
+
+    renderTopics(data.topics);
+
+  } catch (err) {
+    console.error('[APP] Falha ao processar pauta:', err);
+    alert(`Erro ao processar a pauta:\n${err.message}`);
+  } finally {
+    btnProcess.disabled    = false;
+    btnProcess.textContent = 'Processar Pauta';
+  }
+});
+
+function renderTopics(topics) {
+  topicsList.innerHTML = '';
+
+  if (!topics || topics.length === 0) {
+    topicsList.innerHTML = '<li class="topics-empty">Nenhum tópico encontrado.</li>';
     return;
   }
 
-  topicsList.innerHTML = '';
-
-  lines.forEach((topic, index) => {
+  topics.forEach((topic, index) => {
     const id = `topic-${index}`;
     const li = document.createElement('li');
     li.className = 'topic-item';
@@ -171,8 +195,8 @@ btnProcess.addEventListener('click', () => {
     topicsList.appendChild(li);
   });
 
-  console.log(`[PAUTA] ${lines.length} tópico(s) processado(s):`, lines);
-});
+  console.log(`[PAUTA] ${topics.length} tópico(s) renderizados:`, topics);
+}
 
 // ===== BOTÃO INICIAR / PAUSAR =====
 btnStart.addEventListener('click', () => {
@@ -200,7 +224,7 @@ btnAnalyze.addEventListener('click', () => {
     `Progresso da Reunião\n\n` +
     `Tópicos: ${done} de ${total} concluídos\n` +
     `Palavras transcritas: ${words}\n\n` +
-    `(Análise por IA será adicionada na Fase 2)`
+    `(Análise de conteúdo será adicionada na Fase 3)`
   );
 });
 

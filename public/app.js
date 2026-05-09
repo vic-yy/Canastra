@@ -13,6 +13,7 @@ const transcription  = document.getElementById('transcription');
 let isListening = false;
 let recognition = null;
 let fullTranscript = '';
+let currentInterim = '';
 
 // ===== SPEECH RECOGNITION SETUP =====
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -49,14 +50,16 @@ function initRecognition() {
 
     if (newFinal) {
       fullTranscript += newFinal;
-      console.log('[TRANSCRIÇÃO] Texto confirmado adicionado:', newFinal.trim());
+      currentInterim = '';
+      console.log('[TRANSCRIÇÃO] Texto confirmado:', newFinal.trim());
     }
 
-    transcription.value = fullTranscript + interimText;
+    currentInterim = interimText;
+    transcription.value = fullTranscript + currentInterim;
     transcription.scrollTop = transcription.scrollHeight;
 
     if (interimText) {
-      console.log('[TRANSCRIÇÃO] Texto provisório (interim):', interimText);
+      console.log('[TRANSCRIÇÃO] Texto interim (provisório):', interimText);
     }
   };
 
@@ -68,11 +71,18 @@ function initRecognition() {
     }
   };
 
-  // Reinicia automaticamente se parar inesperadamente enquanto ainda deve estar ouvindo
+  // O Chrome encerra a sessão após ~8s de silêncio mesmo com continuous:true.
+  // Antes de reiniciar, salvamos qualquer texto interim que ainda não foi confirmado.
   rec.onend = () => {
-    console.log('[MIC] Reconhecimento encerrado.');
+    console.log('[MIC] Sessão de reconhecimento encerrada.');
+    if (currentInterim) {
+      fullTranscript += currentInterim + ' ';
+      console.log('[MIC] Texto interim preservado no restart:', currentInterim.trim());
+      currentInterim = '';
+      transcription.value = fullTranscript;
+    }
     if (isListening) {
-      console.log('[MIC] Reiniciando reconhecimento automaticamente...');
+      console.log('[MIC] Reiniciando sessão automaticamente...');
       rec.start();
     }
   };
@@ -106,6 +116,11 @@ function stopListening() {
   if (!recognition) return;
 
   isListening = false;
+  if (currentInterim) {
+    fullTranscript += currentInterim + ' ';
+    currentInterim = '';
+    transcription.value = fullTranscript;
+  }
   recognition.stop();
   recognition = null;
 

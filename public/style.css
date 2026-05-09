@@ -266,6 +266,29 @@ textarea::placeholder {
   50% { opacity: 0.4; transform: scale(0.7); }
 }
 
+/* ===== SECTION LABEL ROW ===== */
+.section-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-family: var(--font);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  transition: color var(--transition);
+}
+
+.btn-link:hover {
+  color: var(--color-danger);
+}
+
 /* ===== TOPICS LIST ===== */
 .topics-list {
   list-style: none;

@@ -82,6 +82,73 @@ app.post('/api/extract-agenda', async (req, res) => {
   }
 });
 
+// ===== POST /api/analyze-progress =====
+app.post('/api/analyze-progress', async (req, res) => {
+  const { topics, transcription } = req.body;
+
+  if (!topics || !Array.isArray(topics) || topics.length === 0) {
+    return res.status(400).json({ error: 'Lista de tópicos ausente ou vazia.' });
+  }
+  if (!transcription || !transcription.trim()) {
+    return res.status(400).json({ error: 'Transcrição ausente ou vazia.' });
+  }
+
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'GROQ_API_KEY não configurada no servidor.' });
+
+  const topicsList = topics.map((t, i) => `${i}. ${t}`).join('\n');
+
+  try {
+    const groqResponse = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Você é um assistente de reuniões. Analise a transcrição e identifique quais tópicos da lista foram abordados. ' +
+              'Um tópico foi abordado se foi mencionado ou discutido na transcrição, mesmo que brevemente. ' +
+              'Retorne EXCLUSIVAMENTE um objeto JSON com uma chave "covered" contendo um array de números ' +
+              '(os índices base 0 dos tópicos abordados). Sem markdown, sem explicações extras.'
+          },
+          {
+            role: 'user',
+            content: `Tópicos planejados:\n${topicsList}\n\nTranscrição da reunião:\n${transcription}`
+          }
+        ],
+        temperature: 0.1,
+        response_format: { type: 'json_object' }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      }
+    );
+
+    console.log('[GROQ] Análise de progresso:', JSON.stringify(groqResponse.data, null, 2));
+
+    const raw = groqResponse.data.choices[0].message.content;
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed.covered)) {
+      throw new Error('Resposta da IA sem o campo "covered" esperado.');
+    }
+
+    return res.json({ covered: parsed.covered });
+
+  } catch (err) {
+    const detail = err.response?.data || err.message;
+    console.error('[GROQ] Erro na análise:', detail);
+    return res.status(500).json({
+      error: err.response?.data?.error?.message || err.message || 'Erro ao analisar progresso.'
+    });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

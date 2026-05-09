@@ -1,13 +1,14 @@
 // ===== ELEMENTOS DA UI =====
-const agendaInput    = document.getElementById('agenda-input');
-const btnProcess     = document.getElementById('btn-process');
-const topicsList     = document.getElementById('topics-list');
-const btnStart       = document.getElementById('btn-start');
-const btnAnalyze     = document.getElementById('btn-analyze');
-const btnEnd         = document.getElementById('btn-end');
-const statusBar      = document.getElementById('status-bar');
-const statusText     = document.getElementById('status-text');
-const transcription  = document.getElementById('transcription');
+const agendaInput      = document.getElementById('agenda-input');
+const btnProcess       = document.getElementById('btn-process');
+const topicsList       = document.getElementById('topics-list');
+const btnClearTopics   = document.getElementById('btn-clear-topics');
+const btnStart         = document.getElementById('btn-start');
+const btnAnalyze       = document.getElementById('btn-analyze');
+const btnEnd           = document.getElementById('btn-end');
+const statusBar        = document.getElementById('status-bar');
+const statusText       = document.getElementById('status-text');
+const transcription    = document.getElementById('transcription');
 
 // ===== ESTADO DA APLICAÇÃO =====
 let isListening = false;
@@ -131,7 +132,20 @@ function stopListening() {
   console.log('[MIC] Microfone pausado.');
 }
 
-// ===== PROCESSAR PAUTA (via Tess AI) =====
+// ===== LIMPAR CHECKBOXES =====
+btnClearTopics.addEventListener('click', () => {
+  const items = topicsList.querySelectorAll('.topic-item');
+  if (items.length === 0) return;
+
+  items.forEach(li => {
+    li.classList.remove('done');
+    li.querySelector('input[type="checkbox"]').checked = false;
+  });
+
+  console.log('[TÓPICOS] Todos os checkboxes foram limpos.');
+});
+
+// ===== PROCESSAR PAUTA (via Groq) =====
 btnProcess.addEventListener('click', async () => {
   const rawText = agendaInput.value.trim();
 
@@ -208,24 +222,59 @@ btnStart.addEventListener('click', () => {
 });
 
 // ===== BOTÃO ANALISAR PROGRESSO =====
-btnAnalyze.addEventListener('click', () => {
-  const total   = topicsList.querySelectorAll('.topic-item').length;
-  const done    = topicsList.querySelectorAll('.topic-item.done').length;
-  const pending = total - done;
-  const words   = fullTranscript.trim().split(/\s+/).filter(Boolean).length;
+btnAnalyze.addEventListener('click', async () => {
+  const items = topicsList.querySelectorAll('.topic-item');
 
-  console.log(`[ANÁLISE] Progresso da reunião:`);
-  console.log(`  - Tópicos totais : ${total}`);
-  console.log(`  - Concluídos     : ${done}`);
-  console.log(`  - Pendentes      : ${pending}`);
-  console.log(`  - Palavras trans.: ${words}`);
+  if (items.length === 0) {
+    alert('Processe a pauta antes de analisar o progresso.');
+    return;
+  }
 
-  alert(
-    `Progresso da Reunião\n\n` +
-    `Tópicos: ${done} de ${total} concluídos\n` +
-    `Palavras transcritas: ${words}\n\n` +
-    `(Análise de conteúdo será adicionada na Fase 3)`
-  );
+  const transcript = fullTranscript.trim();
+  if (!transcript) {
+    alert('Nenhuma transcrição disponível ainda. Inicie a reunião e fale algo.');
+    return;
+  }
+
+  const topics = Array.from(items).map(li => li.querySelector('label').textContent);
+
+  btnAnalyze.disabled    = true;
+  btnAnalyze.textContent = 'Analisando...';
+
+  try {
+    const response = await fetch('/api/analyze-progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topics, transcription: transcript })
+    });
+
+    const data = await response.json();
+    console.log('[APP] Resposta de /api/analyze-progress:', data);
+
+    if (!response.ok) {
+      throw new Error(data.error || `Erro HTTP ${response.status}`);
+    }
+
+    // Marca os tópicos identificados como cobertos
+    items.forEach((li, i) => {
+      const checkbox = li.querySelector('input[type="checkbox"]');
+      if (data.covered.includes(i)) {
+        checkbox.checked = true;
+        li.classList.add('done');
+      }
+    });
+
+    const total   = items.length;
+    const covered = data.covered.length;
+    console.log(`[ANÁLISE] IA identificou ${covered} de ${total} tópico(s) abordados:`, data.covered);
+
+  } catch (err) {
+    console.error('[APP] Falha ao analisar progresso:', err);
+    alert(`Erro ao analisar progresso:\n${err.message}`);
+  } finally {
+    btnAnalyze.disabled    = false;
+    btnAnalyze.textContent = 'Analisar Progresso';
+  }
 });
 
 // ===== BOTÃO FINALIZAR =====

@@ -16,10 +16,10 @@ const reportSection    = document.getElementById('report-section');
 const reportOutput     = document.getElementById('report-output');
 
 // ===== ESTADO DA APLICAÇÃO =====
-let isListening = false;
-let recognition = null;
-let fullTranscript = '';
-let currentInterim = '';
+let isListening      = false;
+let recognition      = null;
+let fullTranscript   = '';  // texto de sessões encerradas
+let sessionTranscript = ''; // texto acumulado da sessão ativa
 
 // ===== SPEECH RECOGNITION SETUP =====
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -42,31 +42,21 @@ function initRecognition() {
   };
 
   rec.onresult = (event) => {
-    let interimText = '';
-    let newFinal = '';
-
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const result = event.results[i];
-      if (result.isFinal) {
-        newFinal += result[0].transcript + ' ';
-      } else {
-        interimText += result[0].transcript;
-      }
+    // Reconstrói o transcript completo da sessão a partir de todos os resultados
+    // (finais e interim). Isso garante que cada palavra apareça imediatamente
+    // e nunca suma — sem depender de isFinal para persistir o texto.
+    let text = '';
+    for (let i = 0; i < event.results.length; i++) {
+      text += event.results[i][0].transcript;
+      if (i < event.results.length - 1) text += ' ';
     }
+    sessionTranscript = text;
 
-    if (newFinal) {
-      fullTranscript += newFinal;
-      currentInterim = '';
-      console.log('[TRANSCRIÇÃO] Texto confirmado:', newFinal.trim());
-    }
-
-    currentInterim = interimText;
-    transcription.value = fullTranscript + currentInterim;
+    transcription.value = fullTranscript + (fullTranscript && sessionTranscript ? ' ' : '') + sessionTranscript;
     transcription.scrollTop = transcription.scrollHeight;
 
-    if (interimText) {
-      console.log('[TRANSCRIÇÃO] Texto interim (provisório):', interimText);
-    }
+    const latest = event.results[event.resultIndex][0].transcript.trim();
+    if (latest) console.log('[TRANSCRIÇÃO]', latest);
   };
 
   rec.onerror = (event) => {
@@ -77,18 +67,16 @@ function initRecognition() {
     }
   };
 
-  // O Chrome encerra a sessão após ~8s de silêncio mesmo com continuous:true.
-  // Antes de reiniciar, salvamos qualquer texto interim que ainda não foi confirmado.
   rec.onend = () => {
-    console.log('[MIC] Sessão de reconhecimento encerrada.');
-    if (currentInterim) {
-      fullTranscript += currentInterim + ' ';
-      console.log('[MIC] Texto interim preservado no restart:', currentInterim.trim());
-      currentInterim = '';
+    // Commita o texto da sessão encerrada em fullTranscript antes de reiniciar
+    if (sessionTranscript.trim()) {
+      fullTranscript = (fullTranscript + ' ' + sessionTranscript).trim() + ' ';
+      console.log('[MIC] Sessão encerrada. Texto salvo:', sessionTranscript.trim());
+      sessionTranscript = '';
       transcription.value = fullTranscript;
     }
     if (isListening) {
-      console.log('[MIC] Reiniciando sessão automaticamente...');
+      console.log('[MIC] Reiniciando sessão...');
       rec.start();
     }
   };
@@ -122,11 +110,7 @@ function stopListening() {
   if (!recognition) return;
 
   isListening = false;
-  if (currentInterim) {
-    fullTranscript += currentInterim + ' ';
-    currentInterim = '';
-    transcription.value = fullTranscript;
-  }
+  // onend vai committar sessionTranscript automaticamente
   recognition.stop();
   recognition = null;
 

@@ -107,10 +107,13 @@ app.post('/api/analyze-progress', async (req, res) => {
           {
             role: 'system',
             content:
-              'Você é um assistente de reuniões. Analise a transcrição e identifique quais tópicos da lista foram abordados. ' +
-              'Um tópico foi abordado se foi mencionado ou discutido na transcrição, mesmo que brevemente. ' +
-              'Retorne EXCLUSIVAMENTE um objeto JSON com uma chave "covered" contendo um array de números ' +
-              '(os índices base 0 dos tópicos abordados). Sem markdown, sem explicações extras.'
+              'Você é um assistente de reuniões. Para cada tópico da lista, analise a transcrição e:\n' +
+              '1. Determine se o tópico foi abordado (covered: true/false)\n' +
+              '2. Se foi abordado: extraia o trecho mais relevante da transcrição (citação direta, máximo 3 frases)\n' +
+              '3. Se foi abordado: escreva um resumo conciso do que foi discutido (máximo 2 frases)\n\n' +
+              'Retorne EXCLUSIVAMENTE um objeto JSON com o formato:\n' +
+              '{"results":[{"index":0,"covered":true,"excerpt":"trecho direto da transcrição","summary":"resumo do que foi discutido"},{"index":1,"covered":false,"excerpt":null,"summary":null}]}\n' +
+              'Sem markdown, sem explicações extras. Um objeto por tópico, na mesma ordem da lista.'
           },
           {
             role: 'user',
@@ -134,11 +137,11 @@ app.post('/api/analyze-progress', async (req, res) => {
     const raw = groqResponse.data.choices[0].message.content;
     const parsed = JSON.parse(raw);
 
-    if (!Array.isArray(parsed.covered)) {
-      throw new Error('Resposta da IA sem o campo "covered" esperado.');
+    if (!Array.isArray(parsed.results)) {
+      throw new Error('Resposta da IA sem o campo "results" esperado.');
     }
 
-    return res.json({ covered: parsed.covered });
+    return res.json({ results: parsed.results });
 
   } catch (err) {
     const detail = err.response?.data || err.message;

@@ -134,12 +134,14 @@ function stopListening() {
 
 // ===== LIMPAR CHECKBOXES =====
 btnClearTopics.addEventListener('click', () => {
-  const items = topicsList.querySelectorAll('.topic-item');
+  const items = topicsList.querySelectorAll('.topic-tab');
   if (items.length === 0) return;
 
   items.forEach(li => {
-    li.classList.remove('done');
+    li.classList.remove('done', 'expanded', 'covered');
     li.querySelector('input[type="checkbox"]').checked = false;
+    const inner = li.querySelector('.topic-tab__body-inner');
+    if (inner) inner.innerHTML = '<p class="topic-tab__empty">Nenhuma análise disponível ainda.</p>';
   });
 
   console.log('[TÓPICOS] Todos os checkboxes foram limpos.');
@@ -193,17 +195,30 @@ function renderTopics(topics) {
   topics.forEach((topic, index) => {
     const id = `topic-${index}`;
     const li = document.createElement('li');
-    li.className = 'topic-item';
+    li.className = 'topic-tab';
     li.dataset.index = index;
 
     li.innerHTML = `
-      <input type="checkbox" id="${id}" />
-      <label for="${id}">${escapeHtml(topic)}</label>
+      <div class="topic-tab__header">
+        <input type="checkbox" id="${id}" />
+        <label for="${id}">${escapeHtml(topic)}</label>
+        <span class="topic-tab__arrow">▾</span>
+      </div>
+      <div class="topic-tab__body">
+        <div class="topic-tab__body-inner">
+          <p class="topic-tab__empty">Nenhuma análise disponível ainda.</p>
+        </div>
+      </div>
     `;
 
     li.querySelector('input').addEventListener('change', (e) => {
       li.classList.toggle('done', e.target.checked);
       console.log(`[TÓPICO] "${topic}" marcado como ${e.target.checked ? 'concluído' : 'pendente'}.`);
+    });
+
+    li.querySelector('.topic-tab__header').addEventListener('click', (e) => {
+      if (e.target.type === 'checkbox') return;
+      li.classList.toggle('expanded');
     });
 
     topicsList.appendChild(li);
@@ -223,7 +238,7 @@ btnStart.addEventListener('click', () => {
 
 // ===== BOTÃO ANALISAR PROGRESSO =====
 btnAnalyze.addEventListener('click', async () => {
-  const items = topicsList.querySelectorAll('.topic-item');
+  const items = topicsList.querySelectorAll('.topic-tab');
 
   if (items.length === 0) {
     alert('Processe a pauta antes de analisar o progresso.');
@@ -255,18 +270,34 @@ btnAnalyze.addEventListener('click', async () => {
       throw new Error(data.error || `Erro HTTP ${response.status}`);
     }
 
-    // Marca os tópicos identificados como cobertos
-    items.forEach((li, i) => {
+    // Popula cada aba com o resultado da análise
+    items.forEach((li) => {
+      const i      = parseInt(li.dataset.index);
+      const result = data.results.find(r => r.index === i);
+      if (!result) return;
+
       const checkbox = li.querySelector('input[type="checkbox"]');
-      if (data.covered.includes(i)) {
+      const inner    = li.querySelector('.topic-tab__body-inner');
+
+      if (result.covered) {
         checkbox.checked = true;
-        li.classList.add('done');
+        li.classList.add('done', 'covered', 'expanded');
+        inner.innerHTML = `
+          <div class="topic-tab__section">
+            <span class="topic-tab__tag">Trecho</span>
+            <blockquote class="topic-tab__quote">${escapeHtml(result.excerpt)}</blockquote>
+          </div>
+          <div class="topic-tab__section">
+            <span class="topic-tab__tag">Resumo</span>
+            <p class="topic-tab__summary-text">${escapeHtml(result.summary)}</p>
+          </div>
+        `;
       }
     });
 
     const total   = items.length;
-    const covered = data.covered.length;
-    console.log(`[ANÁLISE] IA identificou ${covered} de ${total} tópico(s) abordados:`, data.covered);
+    const covered = data.results.filter(r => r.covered).length;
+    console.log(`[ANÁLISE] IA identificou ${covered} de ${total} tópico(s) abordados.`);
 
   } catch (err) {
     console.error('[APP] Falha ao analisar progresso:', err);

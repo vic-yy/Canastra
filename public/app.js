@@ -2,6 +2,9 @@
 const agendaInput      = document.getElementById('agenda-input');
 const btnProcess       = document.getElementById('btn-process');
 const topicsList       = document.getElementById('topics-list');
+const uploadZone       = document.getElementById('upload-zone');
+const fileInput        = document.getElementById('file-input');
+const btnBrowse        = document.getElementById('btn-browse');
 const btnClearTopics   = document.getElementById('btn-clear-topics');
 const btnStart         = document.getElementById('btn-start');
 const btnAnalyze       = document.getElementById('btn-analyze');
@@ -119,6 +122,70 @@ function stopListening() {
   setStatus('stopped', 'Microfone pausado');
 
   console.log('[MIC] Microfone pausado.');
+}
+
+// ===== UPLOAD DE BRIEFING =====
+btnBrowse.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('click', (e) => {
+  if (e.target !== btnBrowse) fileInput.click();
+});
+
+uploadZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  uploadZone.classList.add('drag-over');
+});
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processUpload(file);
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) processUpload(fileInput.files[0]);
+  fileInput.value = '';
+});
+
+async function processUpload(file) {
+  const allowed = ['.pdf', '.docx', '.txt'];
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+  if (!allowed.includes(ext)) {
+    alert('Formato não suportado. Use PDF, DOCX ou TXT.');
+    return;
+  }
+
+  uploadZone.querySelector('.upload-zone__content').innerHTML =
+    `<span class="upload-zone__icon">⏳</span><p class="upload-zone__text">Extraindo texto de <strong>${escapeHtml(file.name)}</strong>...</p>`;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const response = await fetch('/api/upload-briefing', { method: 'POST', body: formData });
+    const data = await response.json();
+
+    if (!response.ok) throw new Error(data.error || `Erro HTTP ${response.status}`);
+
+    agendaInput.value = data.text;
+    uploadZone.classList.add('upload-zone--success');
+    uploadZone.querySelector('.upload-zone__content').innerHTML =
+      `<span class="upload-zone__icon">✅</span>` +
+      `<p class="upload-zone__filename">${escapeHtml(data.filename)}</p>` +
+      `<p class="upload-zone__hint">Texto extraído. Edite a pauta ou clique em Processar.</p>`;
+
+    console.log(`[UPLOAD] "${data.filename}" — ${data.text.length} caracteres carregados na pauta.`);
+
+  } catch (err) {
+    console.error('[UPLOAD] Erro:', err);
+    alert(`Erro ao processar arquivo:\n${err.message}`);
+    uploadZone.classList.remove('upload-zone--success');
+    uploadZone.querySelector('.upload-zone__content').innerHTML =
+      `<span class="upload-zone__icon">📎</span>` +
+      `<p class="upload-zone__text">Arraste um arquivo ou <button class="btn-link" id="btn-browse">clique para selecionar</button></p>` +
+      `<p class="upload-zone__hint">PDF, DOCX ou TXT — máx. 10 MB</p>`;
+    document.getElementById('btn-browse').addEventListener('click', () => fileInput.click());
+  }
 }
 
 // ===== LIMPAR CHECKBOXES =====

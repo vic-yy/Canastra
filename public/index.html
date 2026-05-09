@@ -19,9 +19,22 @@
       <section class="panel panel--left">
         <div class="section-block">
           <label class="section-label" for="agenda-input">Pauta da Reunião</label>
+
+          <div class="upload-zone" id="upload-zone">
+            <input type="file" id="file-input" accept=".pdf,.docx,.txt" hidden />
+            <div class="upload-zone__content" id="upload-content">
+              <span class="upload-zone__icon">📎</span>
+              <p class="upload-zone__text">
+                Arraste um arquivo ou
+                <button class="btn-link" id="btn-browse">clique para selecionar</button>
+              </p>
+              <p class="upload-zone__hint">PDF, DOCX ou TXT — máx. 10 MB</p>
+            </div>
+          </div>
+
           <textarea
             id="agenda-input"
-            placeholder="Cole aqui o texto ou pauta da reunião. Cada linha será tratada como um tópico.&#10;&#10;Exemplo:&#10;- Revisão de metas do trimestre&#10;- Alinhamento de entregas&#10;- Próximos passos"
+            placeholder="Cole aqui o texto ou pauta da reunião, ou faça upload acima.&#10;&#10;Exemplo:&#10;- Revisão de metas do trimestre&#10;- Alinhamento de entregas&#10;- Próximos passos"
           ></textarea>
           <button id="btn-process" class="btn btn--primary">Processar Pauta</button>
         </div>

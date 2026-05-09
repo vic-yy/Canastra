@@ -1,15 +1,60 @@
 require('dotenv').config();
 
-const express    = require('express');
-const axios      = require('axios');
-const path       = require('path');
+const express     = require('express');
+const axios       = require('axios');
+const path        = require('path');
 const PDFDocument = require('pdfkit');
+const multer      = require('multer');
+const pdfParse    = require('pdf-parse');
+const mammoth     = require('mammoth');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.pdf', '.docx', '.txt'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    allowed.includes(ext) ? cb(null, true) : cb(new Error('Formato não suportado. Use PDF, DOCX ou TXT.'));
+  }
+});
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ===== POST /api/upload-briefing =====
+app.post('/api/upload-briefing', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo recebido.' });
+
+  const ext = path.extname(req.file.originalname).toLowerCase();
+
+  try {
+    let text = '';
+
+    if (ext === '.txt') {
+      text = req.file.buffer.toString('utf-8');
+    } else if (ext === '.pdf') {
+      const data = await pdfParse(req.file.buffer);
+      text = data.text;
+    } else if (ext === '.docx') {
+      const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+      text = result.value;
+    }
+
+    text = text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+
+    if (!text) return res.status(422).json({ error: 'Não foi possível extrair texto do arquivo.' });
+
+    console.log(`[UPLOAD] ${req.file.originalname} (${ext}) — ${text.length} caracteres extraídos.`);
+    return res.json({ text, filename: req.file.originalname });
+
+  } catch (err) {
+    console.error('[UPLOAD] Erro ao processar arquivo:', err.message);
+    return res.status(500).json({ error: `Erro ao processar arquivo: ${err.message}` });
+  }
+});
 
 // ===== POST /api/extract-agenda =====
 app.post('/api/extract-agenda', async (req, res) => {

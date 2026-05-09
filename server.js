@@ -211,6 +211,16 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Garante JSON mesmo em rotas não encontradas ou erros não tratados
+app.use((req, res) => {
+  res.status(404).json({ error: `Rota não encontrada: ${req.method} ${req.path}` });
+});
+
+app.use((err, req, res, _next) => {
+  console.error('[SERVER] Erro não tratado:', err);
+  res.status(500).json({ error: err.message || 'Erro interno do servidor.' });
+});
+
 app.listen(PORT, () => {
   console.log(`[SERVER] Servidor rodando em http://localhost:${PORT}`);
 });

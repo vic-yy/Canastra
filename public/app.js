@@ -6,9 +6,13 @@ const btnClearTopics   = document.getElementById('btn-clear-topics');
 const btnStart         = document.getElementById('btn-start');
 const btnAnalyze       = document.getElementById('btn-analyze');
 const btnEnd           = document.getElementById('btn-end');
+const btnReport        = document.getElementById('btn-report');
+const btnCopyReport    = document.getElementById('btn-copy-report');
 const statusBar        = document.getElementById('status-bar');
 const statusText       = document.getElementById('status-text');
 const transcription    = document.getElementById('transcription');
+const reportSection    = document.getElementById('report-section');
+const reportOutput     = document.getElementById('report-output');
 
 // ===== ESTADO DA APLICAÇÃO =====
 let isListening = false;
@@ -320,10 +324,75 @@ btnEnd.addEventListener('click', () => {
   btnStart.disabled   = true;
   btnAnalyze.disabled = true;
   btnEnd.disabled     = true;
+  btnReport.disabled  = false;
 
   const words = fullTranscript.trim().split(/\s+/).filter(Boolean).length;
   console.log('[APP] Reunião finalizada.');
   console.log(`[APP] Transcrição final (${words} palavras):`, fullTranscript);
+});
+
+// ===== BOTÃO GERAR RELATÓRIO =====
+btnReport.addEventListener('click', async () => {
+  const transcript = fullTranscript.trim();
+  if (!transcript) {
+    alert('Nenhuma transcrição disponível para gerar o relatório.');
+    return;
+  }
+
+  const topicItems = topicsList.querySelectorAll('.topic-tab');
+  if (topicItems.length === 0) {
+    alert('Nenhum tópico encontrado. Processe a pauta antes de gerar o relatório.');
+    return;
+  }
+
+  const topics = Array.from(topicItems).map(li => ({
+    text:    li.querySelector('label').textContent,
+    checked: li.querySelector('input[type="checkbox"]').checked
+  }));
+
+  btnReport.disabled    = true;
+  btnReport.textContent = 'Gerando...';
+  reportSection.classList.add('report-section--hidden');
+
+  try {
+    const response = await fetch('/api/generate-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcription: transcript, topics })
+    });
+
+    const data = await response.json();
+    console.log('[APP] Resposta de /api/generate-report:', data);
+
+    if (!response.ok) {
+      throw new Error(data.error || `Erro HTTP ${response.status}`);
+    }
+
+    reportOutput.textContent = data.report;
+    reportSection.classList.remove('report-section--hidden');
+    reportSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  } catch (err) {
+    console.error('[APP] Falha ao gerar relatório:', err);
+    alert(`Erro ao gerar relatório:\n${err.message}`);
+  } finally {
+    btnReport.disabled    = false;
+    btnReport.textContent = 'Gerar Relatório';
+  }
+});
+
+// ===== BOTÃO COPIAR RELATÓRIO =====
+btnCopyReport.addEventListener('click', async () => {
+  const text = reportOutput.textContent;
+  if (!text) return;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    btnCopyReport.textContent = 'Copiado!';
+    setTimeout(() => { btnCopyReport.textContent = 'Copiar'; }, 2000);
+  } catch {
+    alert('Não foi possível copiar. Selecione o texto manualmente.');
+  }
 });
 
 // ===== UTIL =====

@@ -152,6 +152,61 @@ app.post('/api/analyze-progress', async (req, res) => {
   }
 });
 
+// ===== POST /api/generate-report =====
+app.post('/api/generate-report', async (req, res) => {
+  const { transcription, topics } = req.body;
+
+  if (!transcription || !transcription.trim()) {
+    return res.status(400).json({ error: 'Transcrição ausente ou vazia.' });
+  }
+  if (!topics || !Array.isArray(topics) || topics.length === 0) {
+    return res.status(400).json({ error: 'Lista de tópicos ausente ou vazia.' });
+  }
+
+  const apiKey = process.env.TESS_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'TESS_API_KEY não configurada no servidor.' });
+
+  const abordados   = topics.filter(t => t.checked).map(t => `✓ ${t.text}`).join('\n') || 'Nenhum';
+  const pendentes   = topics.filter(t => !t.checked).map(t => `✗ ${t.text}`).join('\n') || 'Nenhum';
+
+  const coletaDeDados =
+    `TÓPICOS ABORDADOS:\n${abordados}\n\n` +
+    `TÓPICOS NÃO ABORDADOS:\n${pendentes}\n\n` +
+    `TRANSCRIÇÃO DA REUNIÃO:\n${transcription}`;
+
+  try {
+    const tessResponse = await axios.post(
+      'https://tess.pareto.io/api/agents/45510/execute',
+      {
+        'coleta-de-dados': coletaDeDados,
+        model: 'tess-5',
+        wait_execution: true
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 60000
+      }
+    );
+
+    console.log('[TESS] Relatório gerado:', JSON.stringify(tessResponse.data, null, 2));
+
+    const report = tessResponse.data.output;
+    if (!report) throw new Error('Tess AI não retornou conteúdo no campo "output".');
+
+    return res.json({ report });
+
+  } catch (err) {
+    const detail = err.response?.data || err.message;
+    console.error('[TESS] Erro ao gerar relatório:', detail);
+    return res.status(500).json({
+      error: err.response?.data?.message || err.message || 'Erro ao gerar relatório.'
+    });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
